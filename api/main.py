@@ -26,30 +26,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Defect class mapping (DTU dataset)
+# Defect class mapping (DTU trained model)
 CLASS_NAMES = {
-    0: "Leading Edge Erosion",
-    1: "Surface Crack",
-    2: "Lightning Damage",
-    3: "Coating Damage",
-    4: "Contamination",
-    5: "Delamination",
+    0: "VG;MT",
+    1: "LE;ER",
+    2: "LR;DA",
+    3: "LE;CR",
+    4: "SF;PO",
 }
 
 SEVERITY_MAP = {
-    "Leading Edge Erosion": "critical",
-    "Surface Crack": "major",
-    "Lightning Damage": "critical",
-    "Coating Damage": "minor",
-    "Contamination": "info",
-    "Delamination": "critical",
+    "VG;MT": "minor",
+    "LE;ER": "critical",
+    "LR;DA": "critical",
+    "LE;CR": "major",
+    "SF;PO": "major",
+}
+
+CLASS_DESCRIPTIONS = {
+    "VG;MT": "Vortex generator missing or damaged; monitor and repair to restore aerodynamic performance.",
+    "LE;ER": "Leading edge erosion that can reduce efficiency and accelerate structural wear.",
+    "LR;DA": "Lightning receptor damage that increases strike risk and requires urgent corrective action.",
+    "LE;CR": "Leading edge crack with propagation risk under cyclic turbine loading.",
+    "SF;PO": "Surface peel-off exposing underlying material and increasing further degradation risk.",
 }
 
 # Global model reference
 _model = None
 _sahi_model = None
 
-MODEL_PATH = os.environ.get("MODEL_PATH", "models/best.pt")
+MODEL_PATH = os.environ.get(
+    "MODEL_PATH",
+    str(Path(__file__).resolve().parent / "models" / "best.pt"),
+)
 
 
 def get_model():
@@ -109,6 +118,8 @@ async def detect(
     contents = await file.read()
     image = Image.open(io.BytesIO(contents)).convert("RGB")
     img_w, img_h = image.size
+    # Convert RGB→BGR for OpenCV/YOLO compatibility
+    img_array = np.array(image)[:, :, ::-1].copy()
 
     start = time.time()
 
@@ -120,7 +131,7 @@ async def detect(
 
             model = get_sahi_model()
             result = get_sliced_prediction(
-                image=np.array(image),
+                image=img_array,
                 detection_model=model,
                 slice_height=slice_height,
                 slice_width=slice_width,
@@ -136,6 +147,9 @@ async def detect(
                     "class": cls_name,
                     "confidence": round(obj.score.value, 4),
                     "severity": SEVERITY_MAP.get(cls_name, "info"),
+                    "description": CLASS_DESCRIPTIONS.get(
+                        cls_name, "No description available."
+                    ),
                     "bbox": {
                         "x": round(bbox.minx / img_w * 100, 2),
                         "y": round(bbox.miny / img_h * 100, 2),
@@ -149,7 +163,7 @@ async def detect(
         try:
             model = get_model()
             results = model.predict(
-                source=np.array(image),
+                source=img_array,
                 conf=confidence,
                 iou=iou_threshold,
                 imgsz=640,
@@ -164,6 +178,9 @@ async def detect(
                         "class": cls_name,
                         "confidence": round(float(box.conf[0]), 4),
                         "severity": SEVERITY_MAP.get(cls_name, "info"),
+                        "description": CLASS_DESCRIPTIONS.get(
+                            cls_name, "No description available."
+                        ),
                         "bbox": {
                             "x": round(x1 / img_w * 100, 2),
                             "y": round(y1 / img_h * 100, 2),

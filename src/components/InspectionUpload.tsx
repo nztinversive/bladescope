@@ -3,7 +3,41 @@
 import { useState, useCallback, useRef } from 'react';
 import { Upload, ImageIcon, Loader2, X } from 'lucide-react';
 import InspectionResults from './InspectionResults';
-import { MOCK_INSPECTIONS, InspectionResult } from '@/lib/mock-data';
+import { InspectionResult } from '@/lib/mock-data';
+
+type DetectionSeverity = InspectionResult['detections'][number]['severity'];
+
+interface DetectApiResponse {
+  filename?: string;
+  image_width?: number;
+  image_height?: number;
+  detections?: Array<{
+    class: string;
+    confidence: number;
+    severity?: string;
+    bbox: { x: number; y: number; w: number; h: number };
+    description?: string;
+  }>;
+  inference_time_ms?: number;
+  tiles_processed?: number;
+}
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+const CLASS_DESCRIPTIONS: Record<string, string> = {
+  'VG;MT': 'Vortex generator missing or damaged; monitor and repair to restore aerodynamic performance.',
+  'LE;ER': 'Leading edge erosion that can reduce efficiency and accelerate structural wear.',
+  'LR;DA': 'Lightning receptor damage that increases strike risk and requires urgent corrective action.',
+  'LE;CR': 'Leading edge crack with propagation risk under cyclic turbine loading.',
+  'SF;PO': 'Surface peel-off exposing underlying material and increasing further degradation risk.',
+};
+
+function normalizeSeverity(severity?: string): DetectionSeverity {
+  if (severity === 'critical' || severity === 'major' || severity === 'minor' || severity === 'info') {
+    return severity;
+  }
+  return 'info';
+}
 
 export default function InspectionUpload() {
   const [dragActive, setDragActive] = useState(false);
@@ -28,18 +62,58 @@ export default function InspectionUpload() {
   }, [handleFile]);
 
   const runInference = async () => {
+    if (!file) return;
+
     setLoading(true);
-    // Simulate inference delay
-    await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1000));
-    // Pick a random mock result
-    const mock = MOCK_INSPECTIONS[Math.floor(Math.random() * (MOCK_INSPECTIONS.length - 1))];
-    setResult({
-      ...mock,
-      id: `insp-${Date.now()}`,
-      filename: file?.name || mock.filename,
-      timestamp: new Date().toISOString(),
-    });
-    setLoading(false);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${API_URL}/detect`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let detail = `Request failed (${response.status})`;
+        try {
+          const error = await response.json();
+          if (typeof error?.detail === 'string') {
+            detail = error.detail;
+          }
+        } catch {
+          // ignore parse failures and keep fallback message
+        }
+        throw new Error(detail);
+      }
+
+      const data = (await response.json()) as DetectApiResponse;
+      const timestamp = Date.now();
+
+      setResult({
+        id: `insp-${timestamp}`,
+        filename: data.filename || file.name,
+        timestamp: new Date(timestamp).toISOString(),
+        turbineId: 'WT-NTK-01',
+        bladeNumber: 1,
+        detections: (data.detections || []).map((det, index) => ({
+          id: `det-${timestamp}-${index}`,
+          class: det.class,
+          confidence: det.confidence,
+          severity: normalizeSeverity(det.severity),
+          bbox: det.bbox,
+          description: det.description || CLASS_DESCRIPTIONS[det.class] || 'No description available.',
+        })),
+        inferenceTime: data.inference_time_ms || 0,
+        imageWidth: data.image_width || 0,
+        imageHeight: data.image_height || 0,
+        tilesProcessed: data.tiles_processed || 1,
+      });
+    } catch (error) {
+      console.error('Inference failed:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const reset = () => {

@@ -21,12 +21,11 @@ export interface InspectionResult {
 }
 
 export const DEFECT_CLASSES = [
-  { name: 'Leading Edge Erosion', color: '#ef4444', severity: 'critical' as const },
-  { name: 'Surface Crack', color: '#f97316', severity: 'major' as const },
-  { name: 'Lightning Damage', color: '#ef4444', severity: 'critical' as const },
-  { name: 'Coating Damage', color: '#fbbf24', severity: 'minor' as const },
-  { name: 'Contamination', color: '#3b82f6', severity: 'info' as const },
-  { name: 'Delamination', color: '#ef4444', severity: 'critical' as const },
+  { name: 'VG;MT', color: '#fbbf24', severity: 'minor' as const },
+  { name: 'LE;ER', color: '#ef4444', severity: 'critical' as const },
+  { name: 'LR;DA', color: '#dc2626', severity: 'critical' as const },
+  { name: 'LE;CR', color: '#f97316', severity: 'major' as const },
+  { name: 'SF;PO', color: '#fb923c', severity: 'major' as const },
 ];
 
 export const MOCK_INSPECTIONS: InspectionResult[] = [
