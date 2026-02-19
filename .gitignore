@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+models/
+data/
+__pycache__/
+*.pyc
+.env
+.env.local
+runs/
+*.pt
+*.onnx
