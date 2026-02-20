@@ -6,6 +6,7 @@ build:
     - "ffmpeg"
   python_packages:
     - "ultralytics>=8.4.0"
+    - "sahi>=0.11.18"
 
 predict: predict.py:Predictor
 image: r8.im/nztinversive/bladescope-yolo11m
