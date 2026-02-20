@@ -1,0 +1,11 @@
+build:
+  gpu: true
+  python_version: "3.11"
+  system_packages:
+    - "libglib2.0-0"
+    - "ffmpeg"
+  python_packages:
+    - "ultralytics>=8.4.0"
+
+predict: predict.py:Predictor
+image: r8.im/nztinversive/bladescope-yolo11m

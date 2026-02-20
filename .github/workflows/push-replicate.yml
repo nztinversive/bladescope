@@ -1,0 +1,34 @@
+name: Push to Replicate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "cog/**"
+
+jobs:
+  push:
+    runs-on: ubuntu-latest-8-cores
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Cog
+        uses: replicate/setup-cog@v2
+        with:
+          token: ${{ secrets.REPLICATE_API_TOKEN }}
+
+      - name: Download trained weights
+        run: |
+          # Copy best.pt into cog directory for the build
+          # Weights are stored as a GitHub release asset
+          cd cog
+          gh release download v1.0.0 --pattern "best.pt" --repo ${{ github.repository }} || echo "No release found, checking local..."
+          ls -la best.pt 2>/dev/null || echo "WARNING: best.pt not found!"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Push to Replicate
+        run: |
+          cd cog
+          cog push r8.im/nztinversive/bladescope-yolo11m
