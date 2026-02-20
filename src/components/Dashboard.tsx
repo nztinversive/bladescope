@@ -1,7 +1,10 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { AlertTriangle, Shield, Zap, Clock, Eye, Activity } from 'lucide-react';
-import { DASHBOARD_STATS, MOCK_INSPECTIONS, DEFECT_CLASSES } from '@/lib/mock-data';
+import { DEFECT_CLASSES } from '@/lib/mock-data';
+import { getInspections, computeStats, DashboardStats } from '@/lib/storage';
+import type { InspectionResult } from '@/lib/mock-data';
 
 function StatCard({ icon: Icon, label, value, sub, color }: { icon: any; label: string; value: string | number; sub?: string; color: string }) {
   return (
@@ -19,8 +22,19 @@ function StatCard({ icon: Icon, label, value, sub, color }: { icon: any; label: 
 }
 
 export default function Dashboard() {
-  const stats = DASHBOARD_STATS;
-  const recent = MOCK_INSPECTIONS.slice(0, 5);
+  const [inspections, setInspections] = useState<InspectionResult[]>([]);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalInspections: 0, totalDefects: 0, criticalDefects: 0,
+    avgConfidence: 0, avgInferenceTime: 0, turbinesInspected: 0, defectsByClass: [],
+  });
+
+  useEffect(() => {
+    const data = getInspections();
+    setInspections(data);
+    setStats(computeStats(data));
+  }, []);
+
+  const recent = inspections.slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -34,7 +48,7 @@ export default function Dashboard() {
         <StatCard icon={Eye} label="Inspections" value={stats.totalInspections} sub="All time" color="bg-blue-500/20 text-blue-400" />
         <StatCard icon={AlertTriangle} label="Total Defects" value={stats.totalDefects} sub="Detected" color="bg-amber-500/20 text-amber-400" />
         <StatCard icon={Shield} label="Critical" value={stats.criticalDefects} sub="Require action" color="bg-red-500/20 text-red-400" />
-        <StatCard icon={Zap} label="Avg Confidence" value={`${(stats.avgConfidence * 100).toFixed(0)}%`} sub="Model certainty" color="bg-green-500/20 text-green-400" />
+        <StatCard icon={Zap} label="Avg Confidence" value={stats.totalDefects > 0 ? `${(stats.avgConfidence * 100).toFixed(0)}%` : '—'} sub="Model certainty" color="bg-green-500/20 text-green-400" />
         <StatCard icon={Clock} label="Inference Time" value={`${stats.avgInferenceTime}ms`} sub="Per image avg" color="bg-purple-500/20 text-purple-400" />
         <StatCard icon={Activity} label="Turbines" value={stats.turbinesInspected} sub="Inspected" color="bg-cyan-500/20 text-cyan-400" />
       </div>
@@ -43,6 +57,9 @@ export default function Dashboard() {
         {/* Defect distribution */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5">
           <h2 className="font-semibold mb-4">Defect Distribution</h2>
+          {stats.defectsByClass.length === 0 && (
+            <p className="text-slate-500 text-sm py-8 text-center">No defects recorded yet. Run an inspection to see distribution.</p>
+          )}
           <div className="space-y-3">
             {stats.defectsByClass.map((d) => {
               const cls = DEFECT_CLASSES.find((c) => c.name === d.name);
@@ -67,6 +84,9 @@ export default function Dashboard() {
         {/* Recent inspections */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5">
           <h2 className="font-semibold mb-4">Recent Inspections</h2>
+          {recent.length === 0 && (
+            <p className="text-slate-500 text-sm py-8 text-center">No inspections yet. Upload a blade image to get started.</p>
+          )}
           <div className="space-y-3">
             {recent.map((insp) => (
               <div key={insp.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">

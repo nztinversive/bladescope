@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Upload, ImageIcon, Loader2, X } from 'lucide-react';
 import InspectionResults from './InspectionResults';
 import { InspectionResult } from '@/lib/mock-data';
+import { saveInspection } from '@/lib/storage';
 
 type DetectionSeverity = InspectionResult['detections'][number]['severity'];
 
@@ -98,7 +99,7 @@ export default function InspectionUpload() {
         imgEl.src = URL.createObjectURL(file);
       });
 
-      setResult({
+      const inspectionResult: InspectionResult = {
         id: `insp-${timestamp}`,
         filename: data.filename || file.name,
         timestamp: new Date(timestamp).toISOString(),
@@ -108,7 +109,6 @@ export default function InspectionUpload() {
           let bbox: { x: number; y: number; w: number; h: number };
           const b = det.bbox as any;
           if ('x1' in b && 'y2' in b) {
-            // Absolute pixel coords from Replicate → convert to percentages
             bbox = {
               x: (b.x1 / imgDims.w) * 100,
               y: (b.y1 / imgDims.h) * 100,
@@ -116,7 +116,6 @@ export default function InspectionUpload() {
               h: ((b.y2 - b.y1) / imgDims.h) * 100,
             };
           } else {
-            // Already percentage-based from local FastAPI
             bbox = { x: b.x, y: b.y, w: b.w, h: b.h };
           }
           return {
@@ -132,7 +131,11 @@ export default function InspectionUpload() {
         imageWidth: imgDims.w,
         imageHeight: imgDims.h,
         tilesProcessed: data.tiles_processed || 1,
-      });
+      };
+
+      // Persist to localStorage
+      saveInspection(inspectionResult);
+      setResult(inspectionResult);
     } catch (error) {
       console.error('Inference failed:', error);
     } finally {

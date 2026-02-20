@@ -1,7 +1,9 @@
 'use client';
 
-import { FileImage, AlertTriangle, CheckCircle } from 'lucide-react';
-import { MOCK_INSPECTIONS } from '@/lib/mock-data';
+import { useState, useEffect } from 'react';
+import { FileImage, AlertTriangle, CheckCircle, Trash2 } from 'lucide-react';
+import { getInspections, deleteInspection } from '@/lib/storage';
+import type { InspectionResult } from '@/lib/mock-data';
 
 const severityColors = {
   critical: 'bg-red-500/10 text-red-400',
@@ -11,6 +13,17 @@ const severityColors = {
 };
 
 export default function InspectionHistory() {
+  const [inspections, setInspections] = useState<InspectionResult[]>([]);
+
+  useEffect(() => {
+    setInspections(getInspections());
+  }, []);
+
+  const handleDelete = (id: string) => {
+    deleteInspection(id);
+    setInspections(getInspections());
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -18,6 +31,13 @@ export default function InspectionHistory() {
         <p className="text-slate-400 text-sm mt-1">Previous inspection results and defect tracking</p>
       </div>
 
+      {inspections.length === 0 ? (
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-12 text-center">
+          <FileImage className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+          <p className="text-slate-400 text-lg font-medium">No inspections yet</p>
+          <p className="text-slate-500 text-sm mt-1">Upload and analyze blade images to build your inspection history.</p>
+        </div>
+      ) : (
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -28,10 +48,11 @@ export default function InspectionHistory() {
               <th className="text-left px-5 py-3 font-medium">Defects</th>
               <th className="text-left px-5 py-3 font-medium">Severity</th>
               <th className="text-left px-5 py-3 font-medium">Time</th>
+              <th className="text-left px-5 py-3 font-medium"></th>
             </tr>
           </thead>
           <tbody>
-            {MOCK_INSPECTIONS.map((insp) => {
+            {inspections.map((insp) => {
               const worstSeverity = insp.detections.reduce<string>((worst, d) => {
                 const order = ['critical', 'major', 'minor', 'info'];
                 return order.indexOf(d.severity) < order.indexOf(worst) ? d.severity : worst;
@@ -63,12 +84,22 @@ export default function InspectionHistory() {
                     )}
                   </td>
                   <td className="px-5 py-3 text-slate-500 font-mono text-xs">{insp.inferenceTime}ms</td>
+                  <td className="px-5 py-3">
+                    <button
+                      onClick={() => handleDelete(insp.id)}
+                      className="text-slate-600 hover:text-red-400 transition-colors"
+                      title="Delete inspection"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
