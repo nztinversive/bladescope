@@ -1,15 +1,38 @@
 import { InspectionResult } from './mock-data';
+import { DEMO_SEED_INSPECTIONS } from './seed-data';
 
 const STORAGE_KEY = 'bladescope_inspections';
+
+function cloneSeedInspections(): InspectionResult[] {
+  return DEMO_SEED_INSPECTIONS.map((inspection) => ({
+    ...inspection,
+    detections: inspection.detections.map((detection) => ({
+      ...detection,
+      bbox: { ...detection.bbox },
+    })),
+  }));
+}
+
+function initializeInspections(): InspectionResult[] {
+  const seedData = cloneSeedInspections();
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(seedData));
+  } catch {
+    // Return seed data even if persistence fails (e.g., storage disabled).
+  }
+  return seedData;
+}
 
 export function getInspections(): InspectionResult[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as InspectionResult[];
+    if (!raw) return initializeInspections();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return initializeInspections();
+    return parsed as InspectionResult[];
   } catch {
-    return [];
+    return initializeInspections();
   }
 }
 
