@@ -104,5 +104,9 @@ class Predictor(BasePredictor):
             result.save(image_path)
 
             if return_json:
-                return Output(image=Path(image_path), json_str=result.to_json())
+                try:
+                    json_out = result.to_json()
+                except Exception:
+                    json_out = "[]"
+                return Output(image=Path(image_path), json_str=json_out)
             return Output(image=Path(image_path))
