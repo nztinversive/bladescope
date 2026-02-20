@@ -22,7 +22,7 @@ interface DetectApiResponse {
   tiles_processed?: number;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 const CLASS_DESCRIPTIONS: Record<string, string> = {
   'VG;MT': 'Vortex generator missing or damaged; monitor and repair to restore aerodynamic performance.',
@@ -69,7 +69,7 @@ export default function InspectionUpload() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${API_URL}/detect`, {
+      const response = await fetch(`${API_URL}/api/detect`, {
         method: 'POST',
         body: formData,
       });
