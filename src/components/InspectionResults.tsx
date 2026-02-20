@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Download, AlertTriangle, CheckCircle, Clock, Grid3X3, Loader2 } from 'lucide-react';
 import { InspectionResult, DEFECT_CLASSES } from '@/lib/mock-data';
 import { generateReport } from '@/lib/pdf-report';
+import AnnotationCanvas from './AnnotationCanvas';
 
 interface Props {
   result: InspectionResult;
@@ -20,7 +21,16 @@ const severityConfig = {
 
 export default function InspectionResults({ result, imageUrl, onReset }: Props) {
   const [exporting, setExporting] = useState(false);
+  const [selectedDetId, setSelectedDetId] = useState<string | null>(null);
+  const detRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const hasCritical = result.detections.some((d) => d.severity === 'critical');
+
+  // Scroll sidebar to selected detection
+  useEffect(() => {
+    if (selectedDetId && detRefs.current[selectedDetId]) {
+      detRefs.current[selectedDetId]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [selectedDetId]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -80,38 +90,17 @@ export default function InspectionResults({ result, imageUrl, onReset }: Props) 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Annotated image */}
         <div className="lg:col-span-3 bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-          <div className="relative rounded-lg overflow-hidden bg-slate-900">
-            <img src={imageUrl} alt="Inspection" className="w-full" />
-            {/* Bounding box overlays */}
-            {result.detections.map((det) => {
-              const cls = DEFECT_CLASSES.find((c) => c.name === det.class);
-              const sev = severityConfig[det.severity];
-              return (
-                <div
-                  key={det.id}
-                  className="absolute border-2 rounded"
-                  style={{
-                    left: `${det.bbox.x}%`,
-                    top: `${det.bbox.y}%`,
-                    width: `${det.bbox.w}%`,
-                    height: `${det.bbox.h}%`,
-                    borderColor: cls?.color || '#f59e0b',
-                  }}
-                >
-                  <span
-                    className="absolute -top-5 left-0 text-[10px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
-                    style={{ backgroundColor: cls?.color || '#f59e0b', color: '#0f172a' }}
-                  >
-                    {det.class} {(det.confidence * 100).toFixed(0)}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <AnnotationCanvas
+            imageUrl={imageUrl}
+            detections={result.detections}
+            selectedId={selectedDetId}
+            onSelectDetection={setSelectedDetId}
+          />
           <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
             <span className="flex items-center gap-1"><Grid3X3 className="w-3 h-3" /> {result.imageWidth}×{result.imageHeight}px</span>
             <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {result.inferenceTime}ms</span>
             <span>{result.tilesProcessed} SAHI tiles</span>
+            <span className="text-slate-600">Scroll to zoom · Drag to pan</span>
           </div>
         </div>
 
@@ -127,8 +116,14 @@ export default function InspectionResults({ result, imageUrl, onReset }: Props) 
           ) : (
             result.detections.map((det) => {
               const sev = severityConfig[det.severity];
+              const isSelected = det.id === selectedDetId;
               return (
-                <div key={det.id} className={`bg-slate-800/50 border rounded-xl p-4 ${sev.border}`}>
+                <div
+                  key={det.id}
+                  ref={(el) => { detRefs.current[det.id] = el; }}
+                  onClick={() => setSelectedDetId(isSelected ? null : det.id)}
+                  className={`bg-slate-800/50 border rounded-xl p-4 cursor-pointer transition-all ${isSelected ? 'ring-2 ring-offset-1 ring-offset-slate-900 ' + sev.border.replace('border-', 'ring-').replace('/30', '') : sev.border} hover:bg-slate-800/80`}
+                >
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-sm">{det.class}</span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sev.bg} ${sev.color}`}>
