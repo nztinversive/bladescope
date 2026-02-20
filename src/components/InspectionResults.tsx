@@ -1,7 +1,9 @@
 'use client';
 
-import { ArrowLeft, Download, AlertTriangle, CheckCircle, Clock, Grid3X3 } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Download, AlertTriangle, CheckCircle, Clock, Grid3X3, Loader2 } from 'lucide-react';
 import { InspectionResult, DEFECT_CLASSES } from '@/lib/mock-data';
+import { generateReport } from '@/lib/pdf-report';
 
 interface Props {
   result: InspectionResult;
@@ -17,7 +19,19 @@ const severityConfig = {
 };
 
 export default function InspectionResults({ result, imageUrl, onReset }: Props) {
+  const [exporting, setExporting] = useState(false);
   const hasCritical = result.detections.some((d) => d.severity === 'critical');
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await generateReport(result, imageUrl);
+    } catch (e) {
+      console.error('PDF export failed:', e);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -32,9 +46,13 @@ export default function InspectionResults({ result, imageUrl, onReset }: Props) 
             <p className="text-slate-400 text-sm">{result.filename}</p>
           </div>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm transition-colors">
-          <Download className="w-4 h-4" />
-          Export Report
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm transition-colors disabled:opacity-50"
+        >
+          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          {exporting ? 'Generating...' : 'Export Report'}
         </button>
       </div>
 

@@ -15,7 +15,7 @@ interface DetectApiResponse {
     class: string;
     confidence: number;
     severity?: string;
-    bbox: { x: number; y: number; w: number; h: number };
+    bbox: { x: number; y: number; w: number; h: number } | { x1: number; y1: number; x2: number; y2: number };
     description?: string;
   }>;
   inference_time_ms?: number;
@@ -90,23 +90,47 @@ export default function InspectionUpload() {
       const data = (await response.json()) as DetectApiResponse;
       const timestamp = Date.now();
 
+      // Get actual image dimensions for bbox conversion
+      const imgEl = document.createElement('img');
+      const imgDims = await new Promise<{ w: number; h: number }>((resolve) => {
+        imgEl.onload = () => resolve({ w: imgEl.naturalWidth, h: imgEl.naturalHeight });
+        imgEl.onerror = () => resolve({ w: data.image_width || 1, h: data.image_height || 1 });
+        imgEl.src = URL.createObjectURL(file);
+      });
+
       setResult({
         id: `insp-${timestamp}`,
         filename: data.filename || file.name,
         timestamp: new Date(timestamp).toISOString(),
         turbineId: 'WT-NTK-01',
         bladeNumber: 1,
-        detections: (data.detections || []).map((det, index) => ({
-          id: `det-${timestamp}-${index}`,
-          class: det.class,
-          confidence: det.confidence,
-          severity: normalizeSeverity(det.severity),
-          bbox: det.bbox,
-          description: det.description || CLASS_DESCRIPTIONS[det.class] || 'No description available.',
-        })),
+        detections: (data.detections || []).map((det, index) => {
+          let bbox: { x: number; y: number; w: number; h: number };
+          const b = det.bbox as any;
+          if ('x1' in b && 'y2' in b) {
+            // Absolute pixel coords from Replicate → convert to percentages
+            bbox = {
+              x: (b.x1 / imgDims.w) * 100,
+              y: (b.y1 / imgDims.h) * 100,
+              w: ((b.x2 - b.x1) / imgDims.w) * 100,
+              h: ((b.y2 - b.y1) / imgDims.h) * 100,
+            };
+          } else {
+            // Already percentage-based from local FastAPI
+            bbox = { x: b.x, y: b.y, w: b.w, h: b.h };
+          }
+          return {
+            id: `det-${timestamp}-${index}`,
+            class: det.class,
+            confidence: det.confidence,
+            severity: normalizeSeverity(det.severity),
+            bbox,
+            description: det.description || CLASS_DESCRIPTIONS[det.class] || 'No description available.',
+          };
+        }),
         inferenceTime: data.inference_time_ms || 0,
-        imageWidth: data.image_width || 0,
-        imageHeight: data.image_height || 0,
+        imageWidth: imgDims.w,
+        imageHeight: imgDims.h,
         tilesProcessed: data.tiles_processed || 1,
       });
     } catch (error) {

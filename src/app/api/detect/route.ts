@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const mimeType = file.type || 'image/jpeg';
     const dataUri = `data:${mimeType};base64,${base64}`;
 
-    // Call Replicate API
+    // Call Replicate API with SAHI enabled
     const startTime = Date.now();
     const replicateRes = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
@@ -60,6 +60,9 @@ export async function POST(req: NextRequest) {
           conf: 0.25,
           iou: 0.45,
           imgsz: 640,
+          use_sahi: true,
+          slice_size: 640,
+          overlap_ratio: 0.2,
           return_json: true,
         },
       }),
@@ -75,9 +78,13 @@ export async function POST(req: NextRequest) {
 
     let prediction = await replicateRes.json();
 
-    // Poll for completion
+    // Poll for completion (timeout after 5 min)
+    const pollDeadline = Date.now() + 300_000;
     while (prediction.status !== 'succeeded' && prediction.status !== 'failed') {
-      await new Promise((r) => setTimeout(r, 1000));
+      if (Date.now() > pollDeadline) {
+        return NextResponse.json({ error: 'Prediction timed out' }, { status: 504 });
+      }
+      await new Promise((r) => setTimeout(r, 1500));
       const pollRes = await fetch(prediction.urls.get, {
         headers: { Authorization: `Token ${REPLICATE_TOKEN}` },
       });
@@ -93,7 +100,7 @@ export async function POST(req: NextRequest) {
 
     const inferenceTime = Date.now() - startTime;
 
-    // Parse YOLO JSON output from Replicate
+    // Parse output
     const output = prediction.output;
     const jsonStr = output?.json_str;
     const annotatedImage = output?.image;
@@ -101,39 +108,57 @@ export async function POST(req: NextRequest) {
     let detections: any[] = [];
     if (jsonStr) {
       try {
-        const yamlResults = JSON.parse(jsonStr);
-        detections = yamlResults.map((det: any) => {
-          const cls = det.name || '';
-          const info = CLASS_INFO[cls] || { name: cls, severity: 'info', description: '' };
-          const box = det.box || {};
+        const results = JSON.parse(jsonStr);
+        // Handle both SAHI format (bbox array) and YOLO format (box object)
+        detections = results.map((det: any) => {
+          // SAHI format: { class, confidence, severity, bbox: [x1, y1, x2, y2] }
+          // YOLO format: { name, confidence, box: { x1, y1, x2, y2 } }
+          const cls = det.class || det.name || '';
+          const info = CLASS_INFO[cls] || { name: cls, severity: det.severity || 'info', description: '' };
+
+          let x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+          if (Array.isArray(det.bbox)) {
+            // SAHI format
+            [x1, y1, x2, y2] = det.bbox;
+          } else if (det.box) {
+            // YOLO format
+            x1 = det.box.x1 || 0;
+            y1 = det.box.y1 || 0;
+            x2 = det.box.x2 || 0;
+            y2 = det.box.y2 || 0;
+          }
+
+          // We don't have image dimensions from the API; estimate from bbox max values
+          // The frontend will use percentage-based coords
           return {
             class: cls,
             confidence: det.confidence || 0,
             severity: info.severity,
             description: info.description,
-            bbox: {
-              x: box.x1 ? Math.round((box.x1 / (det.image_width || 640)) * 100 * 100) / 100 : 0,
-              y: box.y1 ? Math.round((box.y1 / (det.image_height || 640)) * 100 * 100) / 100 : 0,
-              w: box.x1 && box.x2 ? Math.round(((box.x2 - box.x1) / (det.image_width || 640)) * 100 * 100) / 100 : 0,
-              h: box.y1 && box.y2 ? Math.round(((box.y2 - box.y1) / (det.image_height || 640)) * 100 * 100) / 100 : 0,
-            },
+            bbox_abs: { x1, y1, x2, y2 },
           };
         });
       } catch {
-        // json parse failed, leave detections empty
+        // json parse failed
       }
     }
 
+    // Convert absolute bbox to percentages if we have the annotated image dimensions
+    // For now, return absolute coords and let frontend handle it
     return NextResponse.json({
       filename: file.name,
-      image_width: 0,
-      image_height: 0,
-      detections,
+      detections: detections.map((d) => ({
+        class: d.class,
+        confidence: d.confidence,
+        severity: d.severity,
+        description: d.description,
+        bbox: d.bbox_abs, // { x1, y1, x2, y2 } absolute pixels
+      })),
       detection_count: detections.length,
       inference_time_ms: inferenceTime,
-      tiles_processed: 1,
+      tiles_processed: 1, // SAHI handles tiling internally
       model: 'YOLO11m-DTU',
-      sahi_enabled: false,
+      sahi_enabled: true,
       annotated_image: annotatedImage || null,
     });
   } catch (error: any) {
